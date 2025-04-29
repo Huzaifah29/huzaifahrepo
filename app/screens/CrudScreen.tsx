@@ -1,47 +1,62 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { View, Text, TextInput, Button, FlatList, StyleSheet, TouchableOpacity } from "react-native";
+import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot } from "firebase/firestore";
+import db from "../../firebase";
 
 type ItemType = {
-  id: number;
+  id: string;
   name: string;
 };
 
 const CrudScreen = () => {
   const [items, setItems] = useState<ItemType[]>([]);
   const [inputText, setInputText] = useState("");
-  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
-  // ✅ Add Item
-  const addItem = () => {
+  // Fetch items in real-time from Firestore
+  useEffect(() => {
+    const unsubscribe = onSnapshot(collection(db, "items"), (snapshot) => {
+      const fetchedItems: ItemType[] = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        name: doc.data().name,
+      }));
+      setItems(fetchedItems);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // Add Item
+  const addItem = async () => {
     if (inputText.trim() === "") return;
-    setItems([...items, { id: Date.now(), name: inputText }]);
+    await addDoc(collection(db, "items"), { name: inputText });
     setInputText("");
   };
 
-  // ✅ Start Editing
+  // Start Editing
   const startEditing = (item: ItemType) => {
     setInputText(item.name);
     setEditingId(item.id);
   };
 
-  // ✅ Update Item
-  const updateItem = () => {
-    if (editingId === null) return;
-    setItems(items.map((item) => (item.id === editingId ? { ...item, name: inputText } : item)));
+  // Update Item
+  const updateItem = async () => {
+    if (!editingId) return;
+    const itemRef = doc(db, "items", editingId);
+    await updateDoc(itemRef, { name: inputText });
     setInputText("");
     setEditingId(null);
   };
 
-  // ✅ Delete Item
-  const deleteItem = (id: number) => {
-    setItems(items.filter((item) => item.id !== id));
+  // Delete Item
+  const deleteItem = async (id: string) => {
+    await deleteDoc(doc(db, "items", id));
   };
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>CRUD App</Text>
+      <Text style={styles.title}>CRUD App with Firestore</Text>
 
-      {/* Input Field */}
       <TextInput
         style={styles.input}
         placeholder="Enter item"
@@ -49,17 +64,18 @@ const CrudScreen = () => {
         onChangeText={setInputText}
       />
 
-      {/* Add / Update Button */}
-      <Button title={editingId !== null ? "Update Item" : "Add Item"} onPress={editingId !== null ? updateItem : addItem} />
+      <Button
+        title={editingId ? "Update Item" : "Add Item"}
+        onPress={editingId ? updateItem : addItem}
+      />
 
-      {/* Item List */}
       <FlatList
         data={items}
-        keyExtractor={(item) => item.id.toString()}
+        keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
           <View style={styles.item}>
             <Text style={styles.itemText}>{item.name}</Text>
-            
+
             <View style={styles.buttons}>
               <TouchableOpacity style={styles.editButton} onPress={() => startEditing(item)}>
                 <Text style={styles.buttonText}>Edit</Text>
